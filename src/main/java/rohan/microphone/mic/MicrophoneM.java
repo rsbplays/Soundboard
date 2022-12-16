@@ -3,8 +3,11 @@ package rohan.microphone.mic;
 import javax.sound.sampled.*;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Target;
+import java.nio.ByteBuffer;
+import java.nio.IntBuffer;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -19,7 +22,10 @@ public class MicrophoneM {
     private SourceDataLine sourceDataLine;
     private TargetDataLine targetDataLine;
 
+    public static IntBuffer intBuffer = IntBuffer.allocate(512);
+
     private static final AudioFormat signedFormat = new AudioFormat(AudioFormat.Encoding.PCM_SIGNED, fFrameRate, 16, 2, 4, fFrameRate, false);
+
 
     public TargetDataLine getTargetDataLine(){
         try {
@@ -40,7 +46,7 @@ public class MicrophoneM {
     public SourceDataLine getSourceDataLine(){
         for (Mixer.Info info:AudioSystem.getMixerInfo()){
             if (info.getDescription().equals("Direct Audio Device: DirectSound Playback")){
-                if (info.getName().equals("Speakers (Realtek(R) Audio)")){
+                if (info.getName().contains("Real")){
                     try {
                         System.out.println("found");
                         return AudioSystem.getSourceDataLine(signedFormat,info);
@@ -73,27 +79,42 @@ public class MicrophoneM {
         sourceDataLine.start();
         targetDataLine.start();
 
-
+        AudioInputStream audioInputStream = null;
+        byte[] audioData;
+        try {
+            audioInputStream = AudioSystem.getAudioInputStream(new File("audio.wav"));
+            audioData = new byte[audioInputStream.available()];
+            audioInputStream.read(audioData, 0, audioData.length);
+        } catch (UnsupportedAudioFileException e) {
+            throw new RuntimeException(e);
+        } catch (IOException e) {
+            throw new RuntimeException(e);
+        }
+        System.out.println(audioData.length);
+        // Read the audio data from the stream and store it in a buffer
+        sourceDataLine.write(audioData,0,audioData.length);
 
         while (true){
-            byte[] bytes = new byte[16];
+            byte[] bytes = new byte[4];
             targetDataLine.read(bytes,0,bytes.length);
+            //System.out.println(bytesToInt(bytes[0],bytes[1])+" "+bytesToInt(bytes[2],bytes[3]));
+            if (intBuffer.remaining()<10) intBuffer.clear();
+            intBuffer.put(bytesToInt(bytes[1],bytes[0]));
 
             int i = 0;
             for (byte b:bytes){
-                System.out.println(b+" "+bytes[i+1]+" "+bytes[i+2]+" "+bytes[i+3]+" "+bytes[i+4]+" "+bytes[i+5]+" "+bytes[i+6]+" "+bytes[i+7]+" ");
-                i+=8;
-                if (i==16) {
-                    break;
-                }
-
+                bytes[i] = (byte) ((byte)  b+b);
+                i++;
             }
-
-            System.out.println(bytes.length);
             sourceDataLine.write(bytes, 0, bytes.length);
             // Create the AudioData object from the byte array
         }
     }
-    
-
+    public int bytesToInt(byte a, byte b){
+        byte[] bytes = new byte[2];
+        bytes[0]=a;
+        bytes[1]=b;
+        ByteBuffer buffer = ByteBuffer.wrap(bytes);
+        return buffer.getShort();
+    }
 }
